@@ -120,7 +120,6 @@ class EasyCompletion {
             array_shift($arguments); // binary from autocompletionscript
             array_splice($arguments, (int)$argumentIndexToComplete);
             $this->argumentHandle = new ArgumentHandle($arguments);
-            \Medusa\DevTools\debugLog($arguments);
         }
 
         if ($fn) {
