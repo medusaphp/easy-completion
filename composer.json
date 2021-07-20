@@ -1,0 +1,27 @@
+{
+  "name": "medusa/easy-completion",
+  "authors": [
+    {
+      "name": "Pascal Schnell",
+      "email": "pascal.schnell@getmedusa.org"
+    }
+  ],
+  "description": "Create own bash completion scripts in minutes",
+  "keywords": [
+    "bash_completion",
+    "completion",
+    "autocomplete"
+  ],
+  "license": "MIT",
+  "require": {
+    "php": ">=8.0"
+  },
+  "require-dev": {
+    "medusa/dev-tools-alias": "^1.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Medusa\\EasyCompletion\\": "src"
+    }
+  }
+}
