@@ -13,7 +13,7 @@ use function array_values;
 use function call_user_func;
 use function copy;
 use function count;
-use function dd;
+use function defined;
 use function file_put_contents;
 use function implode;
 use function in_array;
@@ -92,20 +92,30 @@ class EasyCompletion {
         }
     }
 
-    public function run(?callable $fn = null) {
+    public function run(?callable $fn = null): void {
+
+        if (defined('MDS_EASY_COMPLETION_INSTALL_MODE')) {
+            $this->install();
+            return;
+        }
 
         $this->argumentHandle = ArgumentHandle::createFromGlobals();
+
         $isPhar = Phar::running() !== '';
 
         if (!$isPhar) {
             $arg = $this->argumentHandle->get(0);
-            if (!in_array($arg, ['--install', '--test', '--test-phar'])) {
-                Cli::stdErr('First argument must be one of --install, --test, --test-phar');
+            if (!in_array($arg, ['--install', '--test', '--test-phar', '--create-installer'])) {
+                Cli::stdErr('First argument must be one of --install, --test, --test-phar, --create-installer');
                 Cli::errorExit();
             }
 
             if ($arg === '--install') {
-                return $this->install();
+                $this->install();
+                return;
+            } elseif ($arg === '--create-installer') {
+                $this->createInstaller();
+                return;
             } elseif ($arg !== '--test-phar') {
                 $this->pharFileCommandHandle = null;
             }
@@ -226,6 +236,14 @@ class EasyCompletion {
         }
     }
 
+    protected function createInstaller() {
+        $this->validate($this->map);
+        $name = is_array($this->command) ? $this->command['name'] : $this->command;
+        $exec = is_array($this->command) ? ($this->command['exec'] ?? null) : null;
+        $installer = Installer::fromGlobals($name, $exec, false);
+        $installer->createInstaller();
+    }
+
     /**
      * @param array    $all
      * @param Argument $lastArg
@@ -278,8 +296,6 @@ class EasyCompletion {
 
             for ($neededArgCounter = 0; $neededArgCounter < $neededArgCount; $neededArgCounter++) {
                 while (true) {
-
-                    $debug = $i > 0;
 
                     $i++;
                     if ($i < $max) {

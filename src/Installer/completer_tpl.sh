@@ -14,7 +14,7 @@ _{{ name }}_completion()
     then
       cur=""
     fi
-    cmd=$(php {{ executeable }} "${COMP_CWORD}" "${COMP_WORDS[@]}")
+    cmd=$({{ executable }} "${COMP_CWORD}" "${COMP_WORDS[@]}")
     if [ $? == 212 ]; then
       cur=${cur//\\ / }
       [[ ${cur} == "~/"* ]] && cur=${cur/\~/$HOME}

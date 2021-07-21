@@ -1,37 +1,35 @@
 <?php declare(strict_types = 1);
 namespace Medusa\EasyCompletion\Installer;
 
+use Medusa\EasyCompletion\Build\BuildDir;
 use Medusa\EasyCompletion\Build\ExtractCallable;
+use Medusa\EasyCompletion\Build\TempDir;
 use Medusa\EasyCompletion\Build\User;
 use Medusa\EasyCompletion\Cli;
 use Medusa\EasyCompletion\EasyCompletion;
-use Phar;
 use function array_filter;
 use function basename;
 use function chmod;
 use function copy;
 use function date;
+use function defined;
 use function dirname;
-use function exec;
 use function explode;
 use function file;
 use function file_exists;
 use function file_get_contents;
 use function file_put_contents;
 use function get_included_files;
+use function getcwd;
+use function glob;
 use function implode;
 use function is_callable;
-use function md5;
-use function microtime;
-use function mt_rand;
 use function preg_replace;
 use function realpath;
 use function str_replace;
-use function strlen;
-use function substr;
 use function touch;
 use function trim;
-use function unlink;
+use const MDS_EASY_COMPLETION_INSTALL_MODE;
 use const PHP_EOL;
 
 /**
@@ -50,7 +48,7 @@ class Installer {
     ) {
     }
 
-    public static function fromGlobals(string $name, string|null|callable $exec) {
+    public static function fromGlobals(string $name, string|null|callable $exec, bool $createExecFile = true) {
 
         $user = User::getInstance();
 
@@ -69,8 +67,10 @@ class Installer {
         if (is_callable($exec)) {
             $extractedClosure = ExtractCallable::do($exec);
             $fileName = $name . '.fn.php';
-            file_put_contents($installDirCompletionPhar . '/' . $fileName, $extractedClosure);
-            Cli::stdOut('executable at ' . $installDirCompletionPhar . '/' . $fileName . ' successfully created' . PHP_EOL);
+            if ($createExecFile) {
+                file_put_contents($installDirCompletionPhar . '/' . $fileName, $extractedClosure);
+                Cli::stdOut('executable at ' . $installDirCompletionPhar . '/' . $fileName . ' successfully created' . PHP_EOL);
+            }
             $exec = EasyCompletion::DEFAULT_PHP_INTERPRETER . ' ' . $installDirCompletionPhar . '/' . $fileName;
         }
 
@@ -78,27 +78,54 @@ class Installer {
         return $self;
     }
 
-    public function run() {
+    public function createInstaller(): void {
+        $phar = new Phar();
+        $phar->selfTest();
 
-        $entryPoint = realpath($_SERVER['SCRIPT_NAME'] ?? get_included_files()[0]);
-        $pharFile = $this->getPathToPharFile();
+        $entrypoint = realpath($_SERVER['SCRIPT_NAME'] ?? get_included_files()[0]);
+        $dir = dirname($entrypoint);
 
-        // create build directory
+        $tmpDirRoot = new TempDir($dir);
+        $tmpDir2 = new BuildDir($tmpDirRoot->getBuildDir());
+        $tmpDir2->add(glob($dir . '/*'));
 
-        $this->createPhar($entryPoint, $pharFile);
-        $tpl = file_get_contents(__DIR__ . '/completer_tpl.sh');
-        $tpl = str_replace(
+        $pharFile = $tmpDir2->getBuildDir() . '/completion.phar';
+        $phar->create($entrypoint, $pharFile);
+
+        $entryPointInstaller = $tmpDirRoot->getBuildDir() . '/installer_entry.php';
+        file_put_contents($entryPointInstaller, str_replace(
             [
-                '{{ name }}',
-                '{{ executeable }}',
+                '{{ NAME }}',
+                '{{ BUILD_DIR }}',
+                '{{ ENTRYPOINT }}',
             ], [
                 $this->name,
-                $pharFile,
-            ], $tpl);
+                basename($tmpDir2->getBuildDir()),
+                basename($entrypoint),
+            ],
+            file_get_contents(__DIR__ . '/installer_entry.php')));
 
-        $completionShTarget = $this->installDirCompletionBash . '/' . $this->name;
-        Cli::stdOut('bash completion at ' . $completionShTarget . ' successfully created' . PHP_EOL);
-        file_put_contents($completionShTarget, $tpl);
+        $pharFileInstaller = getcwd() . '/' . $this->name . '_installer.phar';
+        $phar->create($entryPointInstaller, $pharFileInstaller);
+        $tmpDirRoot->destroy();
+    }
+
+    public function run() {
+
+
+        $pharFile = $this->getPathToPharFile();
+
+        if (!defined('MDS_EASY_COMPLETION_INSTALL_MODE')) {
+            $entryPoint = realpath($_SERVER['SCRIPT_NAME'] ?? get_included_files()[0]);
+            $phar = new Phar();
+            $phar->selfTest();
+            $phar->create($entryPoint, $pharFile);
+        } else {
+            copy(MDS_EASY_COMPLETION_INSTALL_MODE, $pharFile);
+            chmod($pharFile, 0755);
+        }
+
+        $this->createBashCompletionSh($pharFile);
 
         if (!$this->exec) {
             return;
@@ -111,63 +138,21 @@ class Installer {
         return $this->installDirCompletionPhar . '/' . $this->name . '.phar';
     }
 
-    public function createPhar($entrypoint, $pharFile) {
+    private function createBashCompletionSh(string $pharFile, ?string $completionShTarget = null): void {
+        $interpreter = EasyCompletion::DEFAULT_PHP_INTERPRETER;
+        $tpl = file_get_contents(__DIR__ . '/completer_tpl.sh');
+        $tpl = str_replace(
+            [
+                '{{ name }}',
+                '{{ executable }}',
+            ], [
+                $this->name,
+                $interpreter . ' ' . $pharFile,
+            ], $tpl);
 
-        $dir = dirname($entrypoint);
-        $buildDir = $dir . '/._build' . substr(md5(microtime(true) . '#' . mt_rand(1, 1000)), 0, 8);
-
-        Directory::ensureExists($buildDir);
-        Directory::ensureWriteable($buildDir);
-
-        $originResources = glob($dir . '/*');
-
-        foreach ($originResources as $resource) {
-            $target = $buildDir . '/' . substr($resource, strlen($dir) + 1);
-            Directory::ensureExists(dirname($target));
-            Directory::ensureWriteable(dirname($target));
-            exec('cp -R ' . $resource . ' ' . $target);
-        }
-
-        $dir = $buildDir;
-
-        // clean up
-        if (file_exists($pharFile)) {
-            unlink($pharFile);
-        }
-
-        if (file_exists($pharFile . '.gz')) {
-            unlink($pharFile . '.gz');
-        }
-
-        // create phar
-        $phar = new Phar($pharFile);
-
-        // start buffering. Mandatory to modify stub to add shebang
-        $phar->startBuffering();
-
-        // Create the default stub from main.php entrypoint
-        $defaultStub = $phar->createDefaultStub(basename($entrypoint));
-
-        // Add the rest of the apps files
-
-        $phar->buildFromDirectory($dir);
-
-        // Customize the stub to add the shebang
-        $stub = "#!/usr/bin/env " . EasyCompletion::DEFAULT_PHP_INTERPRETER . " \n" . $defaultStub;
-
-        // Add the stub
-        $phar->setStub($stub);
-
-        $phar->stopBuffering();
-
-        // plus - compressing it into gzip
-        $phar->compressFiles(Phar::GZ);
-
-        # Make the file executable
-        chmod($pharFile, 0755);
-
-        exec('rm -rf ' .$buildDir);
-        Cli::stdOut('pharfile at ' . $pharFile . ' successfully created' . PHP_EOL);
+        $completionShTarget ??= $this->installDirCompletionBash . '/' . $this->name;
+        Cli::stdOut('bash completion at ' . $completionShTarget . ' successfully created' . PHP_EOL);
+        file_put_contents($completionShTarget, $tpl);
     }
 
     private function updateAlias() {
