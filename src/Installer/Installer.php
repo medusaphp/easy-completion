@@ -8,6 +8,7 @@ use Medusa\EasyCompletion\Build\User;
 use Medusa\EasyCompletion\Cli;
 use Medusa\EasyCompletion\EasyCompletion;
 use function array_filter;
+use function array_map;
 use function basename;
 use function chmod;
 use function copy;
@@ -27,6 +28,7 @@ use function is_callable;
 use function preg_replace;
 use function realpath;
 use function str_replace;
+use function str_starts_with;
 use function touch;
 use function trim;
 use const MDS_EASY_COMPLETION_INSTALL_MODE;
@@ -128,6 +130,7 @@ class Installer {
         $this->createBashCompletionSh($pharFile);
 
         if (!$this->exec) {
+            $this->cleanupAlias();
             return;
         }
 
@@ -153,6 +156,32 @@ class Installer {
         $completionShTarget ??= $this->installDirCompletionBash . '/' . $this->name;
         Cli::stdOut('bash completion at ' . $completionShTarget . ' successfully created' . PHP_EOL);
         file_put_contents($completionShTarget, $tpl);
+    }
+
+    private function cleanupAlias() {
+
+        if ($this->user->isRoot()) {
+            $easyCompletions = '/etc/easy_completion/ec_alias';
+        } else {
+            $easyCompletions = $this->user->getHome() . '/.easy_completions';
+        }
+
+        if (!file_exists($easyCompletions)) {
+            return;
+        }
+
+        $easyCompletionsContent = array_filter(array_map('trim', file($easyCompletions)));
+        $easyCompletionsContentFiltered = array_filter($easyCompletionsContent, fn(string $row) => !str_starts_with(trim($row), 'alias ' . $this->name . '="'));
+
+        if ($easyCompletionsContentFiltered === $easyCompletionsContent) {
+            Cli::stdOut('no cleanup for alias list at ' . $easyCompletions . ' needed' . PHP_EOL);
+            return;
+        }
+
+        file_put_contents($easyCompletions, implode(PHP_EOL, $easyCompletionsContentFiltered) . PHP_EOL);
+        Cli::stdOut('remove old alias for ' . $this->name . ' at ' . $easyCompletions . PHP_EOL);
+        Cli::stdOut('Pleas run:' . PHP_EOL);
+        Cli::stdOut('   unalias ' . $this->name . PHP_EOL);
     }
 
     private function updateAlias() {
@@ -226,7 +255,8 @@ class Installer {
             $easyCompletionsContent[] = '';
             file_put_contents($easyCompletions, implode(PHP_EOL, $easyCompletionsContent));
             Cli::stdOut('alias list at ' . $easyCompletions . ' successfully updated' . PHP_EOL);
-            Cli::stdOut('run: source ' . $localBashRc . PHP_EOL);
+            Cli::stdOut('Pleas run:' . PHP_EOL);
+            Cli::stdOut('    source ' . $localBashRc . PHP_EOL);
         } else {
             Cli::stdOut('no update for alias list at ' . $easyCompletions . ' needed' . PHP_EOL);
         }
