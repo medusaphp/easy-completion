@@ -8,10 +8,10 @@ use Phar;
 use function array_map;
 use function array_pop;
 use function array_shift;
+use function array_slice;
 use function array_splice;
 use function array_values;
 use function call_user_func;
-use function copy;
 use function count;
 use function defined;
 use function file_put_contents;
@@ -22,7 +22,9 @@ use function is_callable;
 use function is_int;
 use function is_string;
 use function mecExec;
+use function stream_get_meta_data;
 use function tmpfile;
+use const INF;
 use const PHP_EOL;
 
 /**
@@ -73,25 +75,6 @@ class EasyCompletion {
         return $this;
     }
 
-    public function testExec() {
-        $exec = is_array($this->command) ? $this->command['exec'] : null;
-
-        if (is_callable($exec)) {
-            $content = ExtractCallable::do($exec);
-            $file = tmpfile();
-            $path = stream_get_meta_data($file)['uri'];
-            file_put_contents($path, $content);
-            $exec = self::DEFAULT_PHP_INTERPRETER . ' ' . $path;
-            copy($path, $path . '2');
-        }
-
-        if (is_string($exec)) {
-            (new BuildDefaultFunctions())->load();
-            $code = mecExec($exec);
-            Cli::stdOut(PHP_EOL . 'RETURNED ERROR CODE: ' . $code . PHP_EOL);
-        }
-    }
-
     public function run(?callable $fn = null): void {
 
         if (defined('MDS_EASY_COMPLETION_INSTALL_MODE')) {
@@ -105,8 +88,8 @@ class EasyCompletion {
 
         if (!$isPhar) {
             $arg = $this->argumentHandle->get(0);
-            if (!in_array($arg, ['--install', '--test', '--test-phar', '--create-installer'])) {
-                Cli::stdErr('First argument must be one of --install, --test, --test-phar, --create-installer');
+            if (!in_array($arg, ['--install', '--test', '--test-phar', '--create-installer', '--test-exec'])) {
+                Cli::stdErr('First argument must be one of --install, --test, --test-phar, --create-installer, --test-exec');
                 Cli::errorExit();
             }
 
@@ -115,6 +98,9 @@ class EasyCompletion {
                 return;
             } elseif ($arg === '--create-installer') {
                 $this->createInstaller();
+                return;
+            } elseif ($arg === '--test-exec') {
+                $this->testExec();
                 return;
             } elseif ($arg !== '--test-phar') {
                 $this->pharFileCommandHandle = null;
@@ -242,6 +228,27 @@ class EasyCompletion {
         $exec = is_array($this->command) ? ($this->command['exec'] ?? null) : null;
         $installer = Installer::fromGlobals($name, $exec, false);
         $installer->createInstaller();
+    }
+
+    public function testExec() {
+        $exec = is_array($this->command) ? $this->command['exec'] : null;
+
+        if (is_callable($exec)) {
+            $content = ExtractCallable::do($exec);
+            $file = tmpfile();
+            $path = stream_get_meta_data($file)['uri'];
+            file_put_contents($path, $content);
+            $exec = self::DEFAULT_PHP_INTERPRETER . ' ' . $path;
+            $args = array_slice($_SERVER['argv'], 2);
+            $args = array_map('escapeshellarg', $args);
+            $exec .= ' ' . implode(' ', $args);
+        }
+
+        if (is_string($exec)) {
+            (new BuildDefaultFunctions())->load();
+            $code = mecExec($exec);
+            Cli::stdOut(PHP_EOL . 'RETURNED ERROR CODE: ' . $code . PHP_EOL);
+        }
     }
 
     /**
