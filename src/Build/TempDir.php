@@ -12,6 +12,7 @@ use function microtime;
 use function mt_rand;
 use function strlen;
 use function substr;
+use const PHP_EOL;
 
 /**
  * Class TempDir
@@ -41,16 +42,22 @@ class TempDir {
         Directory::ensureWriteable($this->buildDir);
     }
 
-    public function add(array|string $files): void {
+    public function add(array|string $files, ?string $directoryPrefixToRemove = null): void {
 
         if (is_string($files)) {
             $files = [$files];
         }
 
+        $rootStrLength = strlen($this->root);
+
+        if ($directoryPrefixToRemove) {
+            $rootStrLength = strlen($directoryPrefixToRemove);
+        }
+
         foreach ($files as $index => $resource) {
 
             if (is_numeric($index)) {
-                $target = $this->buildDir . '/' . substr($resource, strlen($this->root) + 1);
+                $target = $this->buildDir . '/' . substr($resource, $rootStrLength + 1);
             } else {
                 $target = $this->buildDir . '/' . $resource;
                 $resource = $index;

@@ -13,6 +13,7 @@ use function basename;
 use function chmod;
 use function copy;
 use function date;
+use function define;
 use function defined;
 use function dirname;
 use function explode;
@@ -88,11 +89,15 @@ class Installer {
         $dir = dirname($entrypoint);
 
         $tmpDirRoot = new TempDir($dir);
-        $tmpDir2 = new BuildDir($tmpDirRoot->getBuildDir());
-        $tmpDir2->add(glob($dir . '/*'));
-
-        $pharFile = $tmpDir2->getBuildDir() . '/completion.phar';
+        $pharFile = $tmpDirRoot->getBuildDir() . '/completion.phar';
         $phar->create($entrypoint, $pharFile);
+
+        $tmpDir2 = new BuildDir($tmpDirRoot->getBuildDir());
+        $pharFileInstaller = getcwd() . '/' . $this->name . '_installer.phar';
+        $tmpDir2->add(
+            array_filter(glob($dir . '/*'), fn($row) => $row !== $pharFileInstaller),
+            $dir
+        );
 
         $entryPointInstaller = $tmpDirRoot->getBuildDir() . '/installer_entry.php';
         file_put_contents($entryPointInstaller, str_replace(
@@ -107,13 +112,11 @@ class Installer {
             ],
             file_get_contents(__DIR__ . '/installer_entry.php')));
 
-        $pharFileInstaller = getcwd() . '/' . $this->name . '_installer.phar';
         $phar->create($entryPointInstaller, $pharFileInstaller);
         $tmpDirRoot->destroy();
     }
 
     public function run() {
-
 
         $pharFile = $this->getPathToPharFile();
 
@@ -124,7 +127,9 @@ class Installer {
             $phar->create($entryPoint, $pharFile);
         } else {
             copy(MDS_EASY_COMPLETION_INSTALL_MODE, $pharFile);
+            define('MDS_EASY_COMPLETION_PHAR_TARGET', $pharFile);
             chmod($pharFile, 0755);
+            Cli::stdOut('pharfile at ' . $pharFile . ' successfully created' . PHP_EOL);
         }
 
         $this->createBashCompletionSh($pharFile);

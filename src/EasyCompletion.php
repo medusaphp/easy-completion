@@ -53,6 +53,10 @@ class EasyCompletion {
         return $this->name;
     }
 
+    /**
+     * @param callable[] $commands
+     * @return $this
+     */
     public function commandsForPharFile(array $commands): static {
         $this->pharFileCommandHandle = new PharFileCommandHandle($this, $commands);
         return $this;
@@ -231,7 +235,12 @@ class EasyCompletion {
     }
 
     public function testExec() {
-        $exec = is_array($this->command) ? $this->command['exec'] : null;
+        $exec = is_array($this->command) ? ($this->command['exec'] ?? null) : null;
+
+        if ($exec === null) {
+            Cli::stdErr('No "exec" entry found. Abort.');
+            Cli::errorExit();
+        }
 
         if (is_callable($exec)) {
             $content = ExtractCallable::do($exec);

@@ -40,7 +40,6 @@ class Phar {
     public function create($entrypoint, $pharFile): void {
 
         $dir = dirname($entrypoint);
-
         $tmpDir = new TempDir($dir);
         $tmpDir->add(glob($dir . '/*'));
 
