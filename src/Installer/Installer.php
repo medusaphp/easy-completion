@@ -87,13 +87,13 @@ class Installer {
 
         $entrypoint = realpath($_SERVER['SCRIPT_NAME'] ?? get_included_files()[0]);
         $dir = dirname($entrypoint);
+        $pharFileInstaller = getcwd() . '/' . $this->name . '_installer.phar';
 
         $tmpDirRoot = new TempDir($dir);
         $pharFile = $tmpDirRoot->getBuildDir() . '/completion.phar';
-        $phar->create($entrypoint, $pharFile);
+        $phar->create($entrypoint, $pharFile, [$pharFileInstaller]);
 
         $tmpDir2 = new BuildDir($tmpDirRoot->getBuildDir());
-        $pharFileInstaller = getcwd() . '/' . $this->name . '_installer.phar';
         $tmpDir2->add(
             array_filter(glob($dir . '/*'), fn($row) => $row !== $pharFileInstaller),
             $dir

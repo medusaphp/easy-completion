@@ -4,6 +4,7 @@ namespace Medusa\EasyCompletion\Installer;
 use Medusa\EasyCompletion\Build\TempDir;
 use Medusa\EasyCompletion\Cli;
 use Medusa\EasyCompletion\EasyCompletion;
+use function array_diff;
 use function basename;
 use function chmod;
 use function dirname;
@@ -37,11 +38,11 @@ class Phar {
         }
     }
 
-    public function create($entrypoint, $pharFile): void {
+    public function create($entrypoint, $pharFile, array $ignoreFiles = []): void {
 
         $dir = dirname($entrypoint);
         $tmpDir = new TempDir($dir);
-        $tmpDir->add(glob($dir . '/*'));
+        $tmpDir->add(array_diff(glob($dir . '/*'), $ignoreFiles));
 
         // clean up
         if (file_exists($pharFile)) {
