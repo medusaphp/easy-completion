@@ -13,6 +13,7 @@ $mecJson = __DIR__ . '/{{ BUILD_DIR }}/mec_installer.json';
 
 if (!is_file($mecJson)) {
     Cli::stdOut('Finish' . PHP_EOL);
+    exit(0);
 }
 $json = json_decode(file_get_contents($mecJson), true);
 $insatllationCallbacks = $json['run-installer'] ?? [];

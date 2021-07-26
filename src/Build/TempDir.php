@@ -2,8 +2,10 @@
 namespace Medusa\EasyCompletion\Build;
 
 use Medusa\EasyCompletion\Installer\Directory;
+use function array_map;
 use function dirname;
 use function exec;
+use function is_dir;
 use function is_file;
 use function is_numeric;
 use function is_string;
@@ -12,7 +14,6 @@ use function microtime;
 use function mt_rand;
 use function strlen;
 use function substr;
-use const PHP_EOL;
 
 /**
  * Class TempDir
@@ -42,7 +43,7 @@ class TempDir {
         Directory::ensureWriteable($this->buildDir);
     }
 
-    public function add(array|string $files, ?string $directoryPrefixToRemove = null): void {
+    public function add(array|string $files, ?string $directoryPrefixToRemove = null, array $ignoreFiles = []): void {
 
         if (is_string($files)) {
             $files = [$files];
@@ -66,6 +67,13 @@ class TempDir {
             Directory::ensureExists(dirname($target));
             Directory::ensureWriteable(dirname($target));
             exec('cp -R ' . $resource . ' ' . $target);
+        }
+
+        $ignoreFiles = array_map(fn(string $ignoreFile) => $this->buildDir . '/' . substr($ignoreFile, $rootStrLength + 1), $ignoreFiles);
+        foreach ($ignoreFiles as $ignoreFile) {
+            if (is_file($ignoreFile) || is_dir($ignoreFile)) {
+                exec('rm -rf ' . $ignoreFile);
+            }
         }
     }
 

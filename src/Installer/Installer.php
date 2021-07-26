@@ -25,7 +25,11 @@ use function get_included_files;
 use function getcwd;
 use function glob;
 use function implode;
+use function in_array;
 use function is_callable;
+use function is_file;
+use function is_readable;
+use function json_decode;
 use function preg_replace;
 use function realpath;
 use function str_replace;
@@ -47,6 +51,7 @@ class Installer {
         private string $installDirCompletionPhar,
         private string $installDirCompletionBash,
         private string $name,
+        private string $cwd,
         private ?string $exec
     ) {
     }
@@ -77,7 +82,7 @@ class Installer {
             $exec = EasyCompletion::DEFAULT_PHP_INTERPRETER . ' ' . $installDirCompletionPhar . '/' . $fileName;
         }
 
-        $self = new self($user, $installDirCompletionPhar, $installDirCompletionBash, $name, $exec);
+        $self = new self($user, $installDirCompletionPhar, $installDirCompletionBash, $name, getcwd(), $exec);
         return $self;
     }
 
@@ -86,18 +91,28 @@ class Installer {
         $phar->selfTest();
 
         $entrypoint = realpath($_SERVER['SCRIPT_NAME'] ?? get_included_files()[0]);
+
         $dir = dirname($entrypoint);
 
+        $configFile = $dir . '/mec_installer.json';
+        $config = [];
+        if (is_file($configFile) && is_readable($configFile)) {
+            $config = json_decode(file_get_contents($configFile), true);
+        }
+        $pharFileInstaller = $this->cwd . '/' . $this->name . '_installer.phar';
+        $ignoreFiles = array_map(function(string $ignoreFile) use ($dir) {
+            if ($ignoreFile[0] === '/') {
+                return $ignoreFile;
+            }
+            return $dir . '/' . $ignoreFile;
+        }, $config['ignoreFiles'] ?? []);
+        $ignoreFiles[] =  $pharFileInstaller;
         $tmpDirRoot = new TempDir($dir);
         $pharFile = $tmpDirRoot->getBuildDir() . '/completion.phar';
-        $phar->create($entrypoint, $pharFile);
+        $phar->create($entrypoint, $pharFile, $ignoreFiles);
 
         $tmpDir2 = new BuildDir($tmpDirRoot->getBuildDir());
-        $pharFileInstaller = getcwd() . '/' . $this->name . '_installer.phar';
-        $tmpDir2->add(
-            array_filter(glob($dir . '/*'), fn($row) => $row !== $pharFileInstaller),
-            $dir
-        );
+        $tmpDir2->add(glob($dir . '/*'), $dir, $ignoreFiles);
 
         $entryPointInstaller = $tmpDirRoot->getBuildDir() . '/installer_entry.php';
         file_put_contents($entryPointInstaller, str_replace(

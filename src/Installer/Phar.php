@@ -37,11 +37,11 @@ class Phar {
         }
     }
 
-    public function create($entrypoint, $pharFile): void {
+    public function create($entrypoint, $pharFile, array $ignoreFiles = []): void {
 
         $dir = dirname($entrypoint);
         $tmpDir = new TempDir($dir);
-        $tmpDir->add(glob($dir . '/*'));
+        $tmpDir->add(glob($dir . '/*'), null, $ignoreFiles);
 
         // clean up
         if (file_exists($pharFile)) {
